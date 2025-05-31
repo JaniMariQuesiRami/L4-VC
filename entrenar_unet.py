@@ -1,28 +1,18 @@
-import tensorflow as tf
 import numpy as np
 from tensorflow.keras import layers, models, optimizers, callbacks
 
-# ✅ Configurar GPU
-tf.debugging.set_log_device_placement(True)  # Mostrar en consola qué se ejecuta en GPU
-gpus = tf.config.list_physical_devices('GPU')
-if gpus:
-    try:
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-        print(f"{len(gpus)} GPU(s) habilitada(s): {[gpu.name for gpu in gpus]}")
-    except RuntimeError as e:
-        print("Error al configurar crecimiento de memoria:", e)
-else:
-    print("❌ No se detectaron GPUs. Usando CPU.")
-
-# ✅ Cargar el dataset
+# Cargar el dataset generado en el paso anterior
 datos = np.load('ventanas_dataset.npz')
 X_train, Y_train = datos['X_train'], datos['Y_train']
 X_val, Y_val = datos['X_val'], datos['Y_val']
 
+# Obtener dimensiones de ventana
 k = X_train.shape[1]
 
-# ✅ Definir modelo U-Net
+# ---------------------------------------
+# Definir la arquitectura U-Net (pequeña)
+# ---------------------------------------
+
 def unet_model(input_size=(k, k, 1)):
     inputs = layers.Input(input_size)
 
@@ -51,26 +41,26 @@ def unet_model(input_size=(k, k, 1)):
 
     outputs = layers.Conv2D(1, 1, activation='sigmoid')(c5)
 
-    return models.Model(inputs=[inputs], outputs=[outputs])
+    model = models.Model(inputs=[inputs], outputs=[outputs])
+    return model
 
-# ✅ Compilar y entrenar
+# ---------------------------------------
+# Compilar y entrenar el modelo
+# ---------------------------------------
+
 model = unet_model()
 model.compile(optimizer=optimizers.Adam(1e-4), loss='mse', metrics=['mae'])
+
 model.summary()
 
-checkpoint = callbacks.ModelCheckpoint('mejor_unet_gpu.h5', monitor='val_loss',
+# Callbacks (guardar el mejor modelo)
+checkpoint = callbacks.ModelCheckpoint('mejor_unet.h5', monitor='val_loss',
                                        save_best_only=True, verbose=1)
-
-# Normalizamos los valores de los píxeles a [0, 1]
-X_train = X_train.astype('float32') / 255.0
-Y_train = Y_train.astype('float32') / 255.0
-X_val = X_val.astype('float32') / 255.0
-Y_val = Y_val.astype('float32') / 255.0
 
 # Entrenamiento
 history = model.fit(
-    X_train, Y_train,
-    validation_data=(X_val, Y_val),
+    X_train / 255.0, Y_train / 255.0,
+    validation_data=(X_val / 255.0, Y_val / 255.0),
     batch_size=64,
     epochs=30,
     callbacks=[checkpoint]
